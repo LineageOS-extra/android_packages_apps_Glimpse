@@ -95,4 +95,6 @@
     <string name="set_wallpaper_lock_screen">Écran de verrouillage</string>
     <string name="set_wallpaper_both">Écran d\'accueil et de verrouillage</string>
     <string name="warning_bin_time_period">Les fichiers seront définitivement supprimés après 30 jours.</string>
+    <string name="motion_photo_show_video">Afficher la vidéo</string>
+    <string name="motion_photo_show_photo">Afficher la photo</string>
 </resources>
