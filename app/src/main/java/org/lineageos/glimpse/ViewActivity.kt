@@ -111,7 +111,24 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
 
     // Adapter
     private val mediaViewerAdapter by lazy {
-        MediaViewerAdapter(viewModel)
+        MediaViewerAdapter(
+            localPlayerViewModel = viewModel,
+            onNavigate = { forward ->
+                viewPager.adapter?.let { adapter ->
+                    val currentPosition = viewPager.currentItem
+
+                    val newPosition = if (forward) {
+                        currentPosition + 1
+                    } else {
+                        currentPosition - 1
+                    }
+
+                    if (newPosition in 0 until adapter.itemCount) {
+                        viewPager.setCurrentItem(newPosition, true)
+                    }
+                }
+            },
+        )
     }
 
     private var lastProcessedMedia: Media? = null
@@ -416,12 +433,16 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
     }
 
     override fun onPause() {
+        saveCurrentVideoPosition()
+
         viewModel.pause()
 
         super.onPause()
     }
 
     override fun onDestroy() {
+        saveCurrentVideoPosition()
+
         removeOnNewIntentListener(intentListener)
 
         viewPager.unregisterOnPageChangeCallback(onPageChangeCallback)
@@ -624,15 +645,21 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
     private fun updateExoPlayer(media: Media, motionPhoto: MotionPhoto?) {
         if (media.mediaType == MediaType.VIDEO) {
             if (media.uri != lastVideoUriPlayed) {
+                saveCurrentVideoPosition()
                 lastVideoUriPlayed = media.uri
                 viewModel.setCurrentVideoUri(media.uri)
             }
         } else {
+            saveCurrentVideoPosition()
             motionPhoto?.also(viewModel::playMotionPhoto) ?: viewModel.stop()
 
             // Make sure we will forcefully reload and restart the video
             lastVideoUriPlayed = null
         }
+    }
+
+    private fun saveCurrentVideoPosition() {
+        viewModel.saveCurrentVideoPosition(lastVideoUriPlayed)
     }
 
     private fun trashMedia(media: Media, trash: Boolean = !media.isTrashed) {

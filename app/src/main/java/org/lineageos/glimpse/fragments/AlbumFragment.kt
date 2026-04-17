@@ -348,6 +348,8 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
         get() = requireArguments().getSerializable(ARG_MEDIA_TYPE, MediaType::class)
     private val mimeType: String?
         get() = requireArguments().getString(ARG_MIME_TYPE, null)
+    private val hideToolbar: Boolean
+        get() = requireArguments().getBoolean(ARG_HIDE_TOOLBAR, false)
 
     // Permissions
     private val permissionsChecker = PermissionsChecker(this, PermissionsUtils.mainPermissions)
@@ -374,6 +376,8 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
 
             windowInsets
         }
+
+        appBarLayout.isVisible = !hideToolbar
 
         toolbar.setupWithNavController(findNavController())
 
@@ -755,6 +759,7 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
         private const val ARG_ALBUM_URI = "album_uri"
         private const val ARG_MEDIA_TYPE = "media_type"
         private const val ARG_MIME_TYPE = "mime_type"
+        private const val ARG_HIDE_TOOLBAR = "hide_toolbar"
 
         /**
          * Create a [Bundle] to use as the arguments for this fragment.
@@ -768,11 +773,13 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
             albumUri: Uri? = null,
             fileType: MediaType? = null,
             mimeType: String? = null,
+            hideToolbar: Boolean = false,
         ) = bundleOf(
             ARG_ALBUM_TYPE to albumType,
             ARG_ALBUM_URI to albumUri,
             ARG_MEDIA_TYPE to fileType,
             ARG_MIME_TYPE to mimeType,
+            ARG_HIDE_TOOLBAR to hideToolbar,
         )
     }
 }
