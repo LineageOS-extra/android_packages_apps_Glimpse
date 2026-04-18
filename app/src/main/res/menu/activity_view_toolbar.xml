@@ -28,7 +28,6 @@
         android:title="Lock" />
 
     <item
-        style="@style/Theme.Glimpse.TopAppBarOption"
         android:id="@+id/info"
         style="@style/Theme.Glimpse.TopAppBarOption"
         android:contentDescription="@string/file_action_information"
