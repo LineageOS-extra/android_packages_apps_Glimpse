@@ -224,9 +224,17 @@ class AlbumsFragment : Fragment(R.layout.fragment_albums) {
                         }
 
                         is RequestStatus.Success -> {
-                            adapter.submitList(it.data)
+                            // Hide the Secure Vault if another app is picking an image!
+                            val isPicking = intentsViewModel.isPicking.value
+                            val filteredAlbums = if (isPicking) {
+                                it.data.filter { album -> album.uri.toString() != "glimpse://secure_vault" }
+                            } else {
+                                it.data
+                            }
 
-                            val isEmpty = it.data.isEmpty()
+                            adapter.submitList(filteredAlbums)
+
+                            val isEmpty = filteredAlbums.isEmpty()
                             recyclerView.isVisible = !isEmpty
                             noMediaLinearLayout.isVisible = isEmpty
                         }
