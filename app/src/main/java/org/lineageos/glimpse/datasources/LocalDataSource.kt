@@ -309,10 +309,14 @@ class LocalDataSource(
             // Set the default path for NEW albums
             var targetPath = "DCIM/MyAlbums/${targetAlbumName.trimEnd('/')}/"
 
+            var targetVolumeName: String? = null
+
             // Query the MediaStore to see if this album already exists.
-            // If it does, we extract its actual RELATIVE_PATH so we don't duplicate it.
             try {
-                val projection = arrayOf(MediaStore.MediaColumns.RELATIVE_PATH)
+                val projection = arrayOf(
+                    MediaStore.MediaColumns.RELATIVE_PATH,
+                    MediaStore.MediaColumns.VOLUME_NAME
+                )
                 val selection = "${MediaStore.MediaColumns.BUCKET_DISPLAY_NAME} = ?"
                 val selectionArgs = arrayOf(targetAlbumName)
 
@@ -325,7 +329,11 @@ class LocalDataSource(
                 )?.use { cursor ->
                     if (cursor.moveToFirst()) {
                         val pathIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+                        val volumeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.VOLUME_NAME)
+
                         val existingPath = cursor.getString(pathIndex)
+                        targetVolumeName = cursor.getString(volumeIndex)
+
                         if (!existingPath.isNullOrBlank()) {
                             // Use the existing path and ensure it has a trailing slash
                             targetPath = if (existingPath.endsWith("/")) existingPath else "$existingPath/"
@@ -347,7 +355,7 @@ class LocalDataSource(
                         return@withContext RequestStatus.Success(Unit)
                     }
                 } catch (e: Exception) {
-                    // Update failed (could be cross-volume move or scoped storage limit).
+                    // Update failed (This is expected if moving between an external and Internal Storage).
                     // We will fall through and attempt the Copy + Delete fallback below.
                     e.printStackTrace()
                 }
@@ -360,7 +368,12 @@ class LocalDataSource(
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
 
-            val collectionUri = if (media.mediaType == MediaType.IMAGE) imagesUri else videosUri
+            val collectionUri = if (media.mediaType == MediaType.IMAGE) {
+                targetVolumeName?.let { MediaStore.Images.Media.getContentUri(it) } ?: imagesUri
+            } else {
+                targetVolumeName?.let { MediaStore.Video.Media.getContentUri(it) } ?: videosUri
+            }
+
             val newUri = contentResolver.insert(collectionUri, insertValues)
                 ?: return@withContext RequestStatus.Error(MediaError.NOT_FOUND)
 
