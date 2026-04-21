@@ -1,11 +1,10 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 The LineageOS Project
+ * SPDX-FileCopyrightText: 2023-2026 The LineageOS Project
  * SPDX-License-Identifier: Apache-2.0
  */
 
 package org.lineageos.glimpse
 
-import android.app.AlertDialog
 import android.app.KeyguardManager
 import android.content.Intent
 import android.content.res.Configuration
@@ -16,6 +15,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -39,6 +39,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -319,10 +320,13 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
 
                 R.id.lockInVault -> {
                     viewModel.displayedMedia.value?.let { media ->
+                        // Forcefully release the exoPlayer lock on the media file before doing operations
+                        viewModel.stop()
+
                         lifecycleScope.launch {
                             val vaultManager = SecureVaultManager(this@ViewActivity)
                             val copySuccess = vaultManager.copyToVault(media)
-                            
+
                             if (copySuccess) {
                                 // Ask MediaStore for the exact original path!
                                 val prefs = getSharedPreferences("VaultPrefs", android.content.Context.MODE_PRIVATE)
@@ -338,6 +342,18 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
                                     prefs.edit().putString(fileName, originalPath).apply()
                                 }
 
+                                // Attempt standard silent deletion first since we might have System/Manage external permissions
+                                try {
+                                    if (contentResolver.delete(media.uri, null, null) > 0) {
+                                        Toast.makeText(this@ViewActivity, "Moved to Secure Vault!", Toast.LENGTH_SHORT).show()
+                                        finish()
+                                        return@launch
+                                    }
+                                } catch (e: SecurityException) {
+                                    // Fallback below
+                                }
+
+                                // Fallback: Scoped storage intent request
                                 val deleteRequest = MediaStore.createDeleteRequest(contentResolver, listOf(media.uri))
                                 val request = IntentSenderRequest.Builder(deleteRequest.intentSender).build()
                                 deleteOriginalLauncher.launch(request)
@@ -699,7 +715,7 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
             // Filter out the Secure Vault so it cannot be selected
             options.addAll(existingAlbums.filter { it != "Secure Vault" })
 
-            AlertDialog.Builder(this@ViewActivity)
+            MaterialAlertDialogBuilder(this@ViewActivity)
                 .setTitle(if (isMove) "Move to Album" else "Copy to Album")
                 .setItems(options.toTypedArray()) { _, which ->
                     if (which == 0) {
@@ -715,17 +731,27 @@ class ViewActivity : AppCompatActivity(R.layout.activity_view) {
     }
 
     private fun showCreateNewAlbumDialog(media: Media, isMove: Boolean) {
-        val builder = AlertDialog.Builder(this)
+        val builder = MaterialAlertDialogBuilder(this)
         builder.setTitle(if (isMove) "Move to Album" else "Copy to Album")
 
         val input = EditText(this)
         input.hint = "Album name"
-        builder.setView(input)
+        input.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        input.isSingleLine = true
+
+        val container = FrameLayout(this)
+        val params = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        val margin = (24 * resources.displayMetrics.density).toInt()
+        params.setMargins(margin, margin / 2, margin, margin / 2)
+        input.layoutParams = params
+        container.addView(input)
+
+        builder.setView(container)
 
         builder.setPositiveButton("OK") { _, _ ->
             val albumName = input.text.toString()
-            if (albumName.isNotEmpty()) {
-                executeCopyOrMove(media, albumName, isMove)
+            if (albumName.isNotBlank()) {
+                executeCopyOrMove(media, albumName.trim(), isMove)
             }
         }
         builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }

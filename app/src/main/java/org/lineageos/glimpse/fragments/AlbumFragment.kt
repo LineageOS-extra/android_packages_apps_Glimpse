@@ -1,12 +1,11 @@
 /*
- * SPDX-FileCopyrightText: 2023-2025 The LineageOS Project
+ * SPDX-FileCopyrightText: 2023-2026 The LineageOS Project
  * SPDX-License-Identifier: Apache-2.0
  */
 
 package org.lineageos.glimpse.fragments
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.WallpaperManager
 import android.content.ClipData
 import android.content.Intent
@@ -21,6 +20,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -45,6 +45,7 @@ import androidx.recyclerview.selection.StorageStrategy
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.shape.MaterialShapeDrawable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
@@ -158,7 +159,7 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
                                 if (vaultManager.copyToVault(media)) {
                                     urisToDelete.add(media.uri) // Keep track of successes
 
-                                    // Ask MediaStore for the exact original path!
+                                    // Ask MediaStore for the exact original path
                                     var originalPath = "DCIM/Restored/"
                                     requireContext().contentResolver.query(
                                         media.uri,
@@ -179,8 +180,24 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
                                 }
                             }
 
-                            // Ask Android to delete the successfully copied originals
                             if (urisToDelete.isNotEmpty()) {
+                                try {
+                                    var allDeleted = true
+                                    for (uri in urisToDelete) {
+                                        if (requireContext().contentResolver.delete(uri, null, null) == 0) {
+                                            allDeleted = false
+                                        }
+                                    }
+                                    if (allDeleted) {
+                                        Toast.makeText(requireContext(), "Locked in Secure Vault!", Toast.LENGTH_SHORT).show()
+                                        selectionTracker?.clearSelection()
+                                        endSelectionMode()
+                                        return@launch
+                                    }
+                                } catch (e: SecurityException) {
+                                    // Fallback to strict scoped storage method below
+                                }
+
                                 lockInVaultContract.launch(
                                     requireContext().contentResolver.createDeleteRequest(
                                         *urisToDelete.toTypedArray()
@@ -646,7 +663,7 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
             // Filter out the Secure Vault so it cannot be selected
             options.addAll(existingAlbums.filter { it != "Secure Vault" })
 
-            AlertDialog.Builder(requireContext())
+            MaterialAlertDialogBuilder(requireContext())
                 .setTitle(if (isMove) "Move to Album" else "Copy to Album")
                 .setItems(options.toTypedArray()) { _, which ->
                     if (which == 0) {
@@ -664,17 +681,27 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
     }
 
     private fun showCreateNewAlbumDialog(selection: List<Media>, isMove: Boolean) {
-        val builder = AlertDialog.Builder(requireContext())
+        val builder = MaterialAlertDialogBuilder(requireContext())
         builder.setTitle(if (isMove) "Move to Album" else "Copy to Album")
 
         val input = EditText(requireContext())
         input.hint = "Album name"
-        builder.setView(input)
+        input.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        input.isSingleLine = true
+
+        val container = FrameLayout(requireContext())
+        val params = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        val margin = (24 * resources.displayMetrics.density).toInt()
+        params.setMargins(margin, margin / 2, margin, margin / 2)
+        input.layoutParams = params
+        container.addView(input)
+
+        builder.setView(container)
 
         builder.setPositiveButton("OK") { _, _ ->
             val albumName = input.text.toString()
-            if (albumName.isNotEmpty()) {
-                executeCopyOrMove(selection, albumName, isMove)
+            if (albumName.isNotBlank()) {
+                executeCopyOrMove(selection, albumName.trim(), isMove)
             }
         }
         builder.setNegativeButton("Cancel") { dialog, _ -> dialog.cancel() }
