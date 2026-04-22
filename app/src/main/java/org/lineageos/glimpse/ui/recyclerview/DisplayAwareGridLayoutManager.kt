@@ -27,7 +27,7 @@ open class DisplayAwareGridLayoutManager(
             HORIZONTAL,
         }
 
-        private fun getSpanCount(
+        fun getSpanCount(
             context: Context,
             targetSpanCount: Int,
             thumbnailPaddingPx: Int,

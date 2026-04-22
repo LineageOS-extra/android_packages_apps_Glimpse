@@ -43,6 +43,7 @@ import androidx.recyclerview.selection.SelectionPredicates
 import androidx.recyclerview.selection.SelectionTracker
 import androidx.recyclerview.selection.StorageStrategy
 import androidx.recyclerview.widget.RecyclerView
+import androidx.transition.TransitionManager
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -66,6 +67,7 @@ import org.lineageos.glimpse.models.AlbumType
 import org.lineageos.glimpse.models.Media
 import org.lineageos.glimpse.models.MediaType
 import org.lineageos.glimpse.models.RequestStatus
+import org.lineageos.glimpse.ui.recyclerview.PinchZoomItemTouchListener
 import org.lineageos.glimpse.ui.recyclerview.ThumbnailAdapter
 import org.lineageos.glimpse.ui.recyclerview.ThumbnailItemDetailsLookup
 import org.lineageos.glimpse.ui.recyclerview.ThumbnailLayoutManager
@@ -91,6 +93,11 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
     private val toolbar by getViewProperty<MaterialToolbar>(R.id.toolbar)
     private val warningTrashTimePeriod by getViewProperty<TextView>(R.id.warningTrashTimePeriod)
     private val warningTrashTimePeriodToolbar by getViewProperty<TextView>(R.id.textView)
+
+    // Pinch to Zoom state
+    private var currentSpanCount = 4
+    private val minSpanCount = 2 // Most zoomed in
+    private val maxSpanCount = 8 // Most zoomed out
 
     // System services
     private val wallpaperManager by lazy {
@@ -435,10 +442,31 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
             }
         }
 
-        recyclerView.layoutManager = ThumbnailLayoutManager(
-            requireContext(), thumbnailAdapter
-        )
+        // Pinch to Zoom Layout Setup
+        val layoutManager = ThumbnailLayoutManager(requireContext(), thumbnailAdapter, currentSpanCount)
+        recyclerView.layoutManager = layoutManager
         recyclerView.adapter = thumbnailAdapter
+
+        // Pinch to Zoom Touch Listener
+        recyclerView.addOnItemTouchListener(
+            PinchZoomItemTouchListener(
+                context = requireContext(),
+                onZoomIn = {
+                    if (currentSpanCount > minSpanCount) {
+                        currentSpanCount--
+                        TransitionManager.beginDelayedTransition(recyclerView)
+                        layoutManager.updateTargetSpanCount(currentSpanCount, thumbnailAdapter)
+                    }
+                },
+                onZoomOut = {
+                    if (currentSpanCount < maxSpanCount) {
+                        currentSpanCount++
+                        TransitionManager.beginDelayedTransition(recyclerView)
+                        layoutManager.updateTargetSpanCount(currentSpanCount, thumbnailAdapter)
+                    }
+                }
+            )
+        )
 
         thumbnailAdapter.setOnItemSelected { media ->
             if (intentsViewModel.isPicking.value) {
@@ -505,8 +533,9 @@ class AlbumFragment : Fragment(R.layout.fragment_album) {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
 
+        // Maintain the current zoom level during rotations
         recyclerView.layoutManager = ThumbnailLayoutManager(
-            requireContext(), thumbnailAdapter
+            requireContext(), thumbnailAdapter, currentSpanCount
         )
     }
 
